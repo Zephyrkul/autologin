@@ -67,9 +67,6 @@ def main():
             nation = input("Nation: ")
             if not nation:
                 break
-            if not nation.replace(" ", "").isalnum() or len(nation) < 2:
-                print("Invalid nation name.")
-                continue
             if nation == "RESET":
                 if input("Warning: This will reset your user agent and saved nations! Continue? [y/N] ").strip().lower() in ("yes", "y"):
                     nations_copy = {}
@@ -79,6 +76,9 @@ def main():
                     print("Okay, I won't reset your nations.")
                     continue
             nation = nation.strip().lower().replace(" ", "_")
+            if any(c not in "-0123456789_abcdefghijklmnopqrstuvwxyz" for c in nation):
+                print("Invalid nation name.")
+                continue
             if nation in nations:
                 if input("That nation is already logged. Would you like to remove it? [y/N] ").strip().lower() in ("yes", "y"):
                     del nations[nation]
@@ -143,13 +143,13 @@ def _log(agent: str, nation: str, **kwargs: str):
             _log.pause_next = time.time()
 
     for notices in root.findall("NOTICES"):
-        for i, notice in enumerate(notices.findall("NOTICE")):
-            news = notice.findall("NEW")
-            if news:
-                for n in news:
-                    notice.remove(n)
-            else:
+        for notice in notices.findall("NOTICE"):
+            nnew = notice.find("NEW")
+            ntype = notice.find("TYPE")
+            if nnew is None or ntype.text in ("I", "U"):
                 notices.remove(notice)
+            else:
+                notice.remove(nnew)
         if len(notices) == 0:
             root.remove(notices)
 
