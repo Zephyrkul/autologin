@@ -26,11 +26,12 @@ def static_vars(**kwargs):
         for k, v in kwargs.items():
             setattr(func, k, v)
         return func
+
     return decorate
 
 
 def clear():
-    return os.system('cls' if os.name=='nt' else 'clear')
+    return os.system("cls" if os.name == "nt" else "clear")
 
 
 def main():
@@ -85,7 +86,9 @@ def run():
                 if error.code == 403:
                     logger.error("%s's password is incorrect. Please update it.", nation)
                 elif error.code == 404:
-                    logger.error("%s does not exist. Please revive it or update your nation list.", nation)
+                    logger.error(
+                        "%s does not exist. Please revive it or update your nation list.", nation
+                    )
                 elif error.code == 409:
                     logger.info("%s was logged into too recently, so it was skipped.", nation)
                 elif error.code == 429:
@@ -103,14 +106,18 @@ def run():
                     return
             except Exception as error:
                 logger.exception(error)
-                print("Something went wrong with the script. Please contact Darcania with the above traceback at your earliest convenience. Aborting run.")
+                print(
+                    "Something went wrong with the script. Please contact Darcania with the above traceback at your earliest convenience. Aborting run."
+                )
                 input("Press enter to return to the menu . . . ")
                 return
     input("Run complete. Press enter to return to the menu . . . ")
 
 
 def set_agent():
-    print("Set a new user agent. Be sure to keep it descriptive, e.g. nation name and contact email.")
+    print(
+        "Set a new user agent. Be sure to keep it descriptive, e.g. nation name and contact email."
+    )
     print("The script itself will append information about itself automatically.")
     agent = input("New agent: ")
     if not agent:
@@ -146,9 +153,14 @@ def add_nations():
                 if error.code == 403:
                     logger.error("%s's password is incorrect. Please try again.", nation)
                 elif error.code == 404:
-                    logger.error("%s does not exist. Please revive it or check your spelling.", nation)
+                    logger.error(
+                        "%s does not exist. Please revive it or check your spelling.", nation
+                    )
                 elif error.code == 409:
-                    logger.info("%s was logged into too recently. Please wait a few moments before trying again.", nation)
+                    logger.info(
+                        "%s was logged into too recently. Please wait a few moments before trying again.",
+                        nation,
+                    )
                 elif error.code == 429:
                     print("The rate limit was exceeded and you've been locked out.")
                     break
@@ -161,7 +173,9 @@ def add_nations():
                     break
             except Exception as error:
                 logger.exception(error)
-                print("Something went wrong with the script. Please contact Darcania with the above traceback at your earliest convenience.")
+                print(
+                    "Something went wrong with the script. Please contact Darcania with the above traceback at your earliest convenience."
+                )
                 break
             else:
                 if data:
@@ -247,11 +261,18 @@ def _log(agent, nation, **kwargs):
             logger.info("Sleeping for %s seconds to avoid rate limit.", sleep_for)
             time.sleep(sleep_for)
     try:
-        with urlopen(Request("https://www.nationstates.net/cgi-bin/api.cgi?nation=%s&q=notices" % nation, headers=headers)) as response:
+        with urlopen(
+            Request(
+                "https://www.nationstates.net/cgi-bin/api.cgi?nation=%s&q=notices" % nation,
+                headers=headers,
+            )
+        ) as response:
             headers = response.headers
             root = ElementTree.fromstring(response.read())
     finally:
-        if int(headers.get("X-ratelimit-requests-seen", 0)) >= min(max(1, 50 - rate_limit_buffer), 50):
+        if int(headers.get("X-ratelimit-requests-seen", 0)) >= min(
+            max(1, 50 - rate_limit_buffer), 50
+        ):
             _log.pause_next = time.time()
 
     for notices in root.findall("NOTICES"):
