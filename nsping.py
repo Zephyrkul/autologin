@@ -1,4 +1,6 @@
+from __future__ import print_function
 import os
+import sys
 import logging
 from getpass import getpass
 import json
@@ -15,16 +17,8 @@ logger = logging.getLogger(__name__)
 rate_limit_buffer = 10
 
 
-filename = os.path.splitext(os.path.basename(__file__))[0] + ".json"
-defaultagent = "{} (Darcania's autologin script)"
-
-
-class Delete(Exception):
-    pass
-
-
-class RateLimitExceeded(Exception):
-    pass
+old_filename = os.path.splitext(os.path.basename(__file__))[0] + ".json"
+defaultagent = "%s (Darcania's autologin script)"
 
 
 def static_vars(**kwargs):
@@ -35,82 +29,207 @@ def static_vars(**kwargs):
     return decorate
 
 
+def clear():
+    return os.system('cls' if os.name=='nt' else 'clear')
+
+
 def main():
-    nations = {}
-    if os.path.isfile(filename):
-        with open(filename, mode="r") as nationfile:
-            nations = json.load(nationfile)
-    nations_copy = nations.copy()
+    if os.path.isfile(old_filename):
+        with open(old_filename, mode="r", encoding="utf-8") as jsonfile:
+            nations = json.load(jsonfile)
+            nations.pop("AGENT", None)
+            with open(".tokens", mode="w", encoding="utf-8") as tokenfile:
+                for tup in nations.items():
+                    tokenfile.write("%s:%s\n" % tup)
+        os.remove(old_filename)
 
-    if "AGENT" not in nations:
-        agent = input("User Agent: ")
-        while not agent:
-            agent = input("You must supply a User Agent: ")
-        nations["AGENT"] = defaultagent.format(agent)
-        print("User agent set!")
-    for nation, autologin in nations_copy.items():
-        if nation == "AGENT":
-            continue
-        try:
-            _log(nations["AGENT"], nation, autologin=autologin)
-        except Delete as error:
-            # 403 Forbidden (wrong password) or 404 Not Found (nonexistent nation)
-            del nations[nation]
-            logger.exception(error.__cause__)
-        except HTTPError as error:
-            logger.exception(error)
-        except Exception as error:
-            logger.exception(error)
-            break
-    else:
+    while True:
+        clear()
+        print("Darcania's autologin script\n")
+        for i, options in enumerate(main_menu_options, 1):
+            _, text = options  # unpack the tuple
+            print("  %d. %s" % (i, text))
+        print("\n  0. Exit\n")
         while True:
-            nation = input("Nation: ")
-            if not nation:
-                break
-            if nation == "RESET":
-                if input("Warning: This will reset your user agent and saved nations! Continue? [y/N] ").strip().lower() in ("yes", "y"):
-                    nations_copy = {}
-                    input("Data reset. Press enter to continue... ")
-                    break
-                else:
-                    print("Okay, I won't reset your nations.")
-                    continue
-            nation = nation.strip().lower().replace(" ", "_")
-            if any(c not in "-0123456789_abcdefghijklmnopqrstuvwxyz" for c in nation):
-                print("Invalid nation name.")
+            response = input("> ")
+            try:
+                response = int(response)
+            except ValueError:
+                print("%r doesn't look like a number, could you try again?" % response)
                 continue
-            if nation in nations:
-                if input("That nation is already logged. Would you like to remove it? [y/N] ").strip().lower() in ("yes", "y"):
-                    del nations[nation]
-                    print("Nation removed.")
-                else:
-                    print("Okay, I won't remove that nation.")
+            if response == 0:
+                sys.exit(0)
+            try:
+                function = main_menu_options[response - 1][0]
+            except IndexError:
+                print("%d isn't a valid option, could you try again?" % response)
                 continue
-            password = getpass()
-            if password:
-                try:
-                    data = _log(nations["AGENT"], nation, password=password)
-                except Delete as error:
-                    del nations[nation]
-                    logger.exception(error.__cause__)
-                except HTTPError as error:
-                    logger.exception(error)
-                except Exception as error:
-                    logger.exception(error)
-                    break
-                else:
-                    if data:
-                        nations.update(data)
-                finally:
-                    del password
+            break
+        print()
+        function()
 
-    if nations != nations_copy:
-        with open(filename, mode="w") as nationfile:
-            json.dump(nations, nationfile)
+
+def run():
+    try:
+        with open("settings.json", "r", encoding="utf-8") as settings:
+            agent = defaultagent % json.load(settings)["agent"]
+    except (FileNotFoundError, json.JSONDecodeError):
+        input("User agent not set. Press enter to return to the menu . . . ")
+        return
+    with open(".tokens", mode="r", encoding="utf-8") as tokens:
+        for line in tokens:
+            nation, autologin = tuple(map(str.strip, line.split(":")))
+            try:
+                _log(agent, nation, autologin=autologin)
+            except HTTPError as error:
+                if error.code == 403:
+                    logger.error("%s's password is incorrect. Please update it.", nation)
+                elif error.code == 404:
+                    logger.error("%s does not exist. Please revive it or update your nation list.", nation)
+                elif error.code == 409:
+                    logger.info("%s was logged into too recently, so it was skipped.", nation)
+                elif error.code == 429:
+                    print("The rate limit was exceeded and you've been locked out. Aborting run.")
+                    input("Press enter to return to the menu . . . ")
+                    return
+                elif error.code >= 500:
+                    print("An internal server error occurred. Aborting run.")
+                    input("Press enter to return to the menu . . . ")
+                    return
+                else:
+                    logger.error(error)
+                    print("An unknown error occurred. Aborting run.")
+                    input("Press enter to return to the menu . . . ")
+                    return
+            except Exception as error:
+                logger.exception(error)
+                print("Something went wrong with the script. Please contact Darcania with the above traceback at your earliest convenience. Aborting run.")
+                input("Press enter to return to the menu . . . ")
+                return
+    input("Run complete. Press enter to return to the menu . . . ")
+
+
+def set_agent():
+    print("Set a new user agent. Be sure to keep it descriptive, e.g. nation name and contact email.")
+    print("The script itself will append information about itself automatically.")
+    agent = input("New agent: ")
+    if not agent:
+        input("No agent given. Press enter to return to the menu . . . ")
+    with open("settings.json", "w", encoding="utf-8") as settings:
+        json.dump({"agent": agent}, settings)
+
+    input("User agent set. Press enter to return to the menu . . . ")
+
+
+def add_nations():
+    try:
+        with open("settings.json", "r", encoding="utf-8") as settings:
+            agent = defaultagent % json.load(settings)["agent"]
+    except (FileNotFoundError, json.JSONDecodeError):
+        input("User agent not set. Press enter to return to the menu . . . ")
+        return
+    to_add = {}
+    while True:
+        nation = input("Nation: ")
+        if not nation:
+            break
+        nation = "_".join(nation.strip().lower().split())
+        if any(c not in "-0123456789_abcdefghijklmnopqrstuvwxyz" for c in nation):
+            print("Invalid nation name.")
+            continue
+        password = getpass()
+        if password:
+            print("Fetching nation token from NS, please wait . . . ")
+            try:
+                data = _log(agent, nation, password=password)
+            except HTTPError as error:
+                if error.code == 403:
+                    logger.error("%s's password is incorrect. Please try again.", nation)
+                elif error.code == 404:
+                    logger.error("%s does not exist. Please revive it or check your spelling.", nation)
+                elif error.code == 409:
+                    logger.info("%s was logged into too recently. Please wait a few moments before trying again.", nation)
+                elif error.code == 429:
+                    print("The rate limit was exceeded and you've been locked out.")
+                    break
+                elif error.code >= 500:
+                    print("An internal server error occurred.")
+                    break
+                else:
+                    logger.error(error)
+                    print("An unknown error occurred.")
+                    break
+            except Exception as error:
+                logger.exception(error)
+                print("Something went wrong with the script. Please contact Darcania with the above traceback at your earliest convenience.")
+                break
+            else:
+                if data:
+                    to_add.update(data)
+            finally:
+                del password
+
+    if not to_add:
+        input("No data to save. Press enter to return to the menu . . . ")
+        return
+
+    print("Saving new nation tokens . . . ")
+    with open(".tokens.tmp", "w", encoding="utf-8") as tokens_tmp:
+        with open(".tokens", "r", encoding="utf-8") as tokens:
+            for line in tokens:
+                nation, _ = tuple(map(str.strip, line.split(":")))
+                if nation in to_add:
+                    line = "%s:%s\n" % (nation, to_add.pop(nation))
+                tokens_tmp.write(line)
+        for tup in to_add.items():
+            tokens_tmp.write("%s:%s\n" % tup)
+    os.replace(".tokens.tmp", ".tokens")
+
+    input("Tokens updated. Press enter to return to the menu . . . ")
+
+
+def remove_nations():
+    to_remove = set()
+    while True:
+        nation = input("Nation: ")
+        if not nation:
+            break
+        nation = "_".join(nation.strip().lower().split())
+        if any(c not in "-0123456789_abcdefghijklmnopqrstuvwxyz" for c in nation):
+            print("Invalid nation name.")
+            continue
+        to_remove.add(nation)
+
+    if not to_remove:
+        input("No nations to remove. Press enter to return to the menu . . . ")
+        return
+
+    print("Updating nation tokens . . . ")
+    with open(".tokens.tmp", "w", encoding="utf-8") as tokens_tmp:
+        with open(".tokens", "r", encoding="utf-8") as tokens:
+            for line in tokens:
+                nation, _ = tuple(map(str.strip, line.split(":")))
+                if nation in to_remove:
+                    continue
+                tokens_tmp.write(line)
+    os.replace(".tokens.tmp", ".tokens")
+
+    input("Tokens updated. Press enter to return to the menu . . . ")
+
+
+def list_nations():
+    _, lines = os.get_terminal_size(2)
+    with open(".tokens", "r", encoding="utf-8") as tokens:
+        for i, line in enumerate(tokens, 1):
+            nation, _ = tuple(map(str.strip, line.split(":")))
+            print(nation)
+            if i % (lines - 1) == 0:
+                input("  -- MORE --  ")
+    input("No more nations. Press enter to return to the menu . . . ")
 
 
 @static_vars(pause_next=None)
-def _log(agent: str, nation: str, **kwargs: str):
+def _log(agent, nation, **kwargs):
     headers = {"User-Agent": agent}
     if "pin" in kwargs:
         headers["X-Pin"] = kwargs.pop("pin")
@@ -119,7 +238,7 @@ def _log(agent: str, nation: str, **kwargs: str):
     else:
         headers["X-Password"] = kwargs.pop("password")
     if kwargs:
-        raise TypeError("Unexpected **kwargs", str(kwargs))
+        raise TypeError("Unexpected **kwargs: %r" % kwargs)
 
     if _log.pause_next:
         sleep_for = 30 - (time.time() - _log.pause_next)
@@ -128,18 +247,11 @@ def _log(agent: str, nation: str, **kwargs: str):
             logger.info("Sleeping for %s seconds to avoid rate limit.", sleep_for)
             time.sleep(sleep_for)
     try:
-        with urlopen(Request("https://www.nationstates.net/cgi-bin/api.cgi?nation={}&q=notices".format(nation), headers=headers)) as response:
+        with urlopen(Request("https://www.nationstates.net/cgi-bin/api.cgi?nation=%s&q=notices" % nation, headers=headers)) as response:
             headers = response.headers
             root = ElementTree.fromstring(response.read())
-    except HTTPError as error:
-        headers = error.headers
-        if error.status == 429:
-            raise RateLimitExceeded(headers.pop("X-Retry-After", "0")) from error
-        if error.status in (403, 404):
-            raise Delete() from error
-        raise
     finally:
-        if int(headers["X-ratelimit-requests-seen"]) >= min(max(1, 50 - rate_limit_buffer), 50):
+        if int(headers.get("X-ratelimit-requests-seen", 0)) >= min(max(1, 50 - rate_limit_buffer), 50):
             _log.pause_next = time.time()
 
     for notices in root.findall("NOTICES"):
@@ -153,8 +265,18 @@ def _log(agent: str, nation: str, **kwargs: str):
         if len(notices) == 0:
             root.remove(notices)
 
-    logger.info("\n%s\n", minidom.parseString(ElementTree.tostring(root)).toprettyxml("    ", ""))
+    print("\n%s\n" % minidom.parseString(ElementTree.tostring(root)).toprettyxml("    ", ""))
     return {root.attrib["id"]: headers["X-Autologin"]} if "X-Autologin" in headers else None
+
+
+# tuple of two-tuples because order is important
+main_menu_options = (
+    (run, "Run the autologin script."),
+    (set_agent, "Sets the script's user agent."),
+    (add_nations, "Add or edit nations and passwords."),
+    (remove_nations, "Remove nations from the list."),
+    (list_nations, "List nation names without logging in to any of them."),
+)
 
 
 if __name__ == "__main__":
