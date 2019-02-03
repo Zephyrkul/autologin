@@ -5,21 +5,21 @@ pushd %~dp0
 ::attempts to start py launcher without relying on path
 %systemroot%\py.exe --version > nul 2>&1
 if %errorlevel% neq 0 goto attempt
-%systemroot%\py.exe -3 nsping.py
+%systemroot%\py.exe -3 nsping.py || pause
 goto end
 
 ::attempts to start py launcher by relying on path
 :attempt
 py.exe --version > nul 2>&1
 if %errorlevel% neq 0 goto lastattempt
-py.exe -3 nsping.py
+py.exe -3 nsping.py || pause
 goto end
 
 ::as a last resort, attempts to start whatever python there is
 :lastattempt
 python.exe --version > nul 2>&1
 if %errorlevel% neq 0 goto message
-python.exe nsping.py
+python.exe nsping.py || pause
 goto end
 
 :message
