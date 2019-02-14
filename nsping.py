@@ -17,10 +17,13 @@ log_fmt = logging.Formatter(
     "%(asctime)s %(levelname)s %(module)s %(funcName)s %(lineno)d: %(message)s",
     datefmt="[%d/%m/%Y %H:%M]",
 )
+ohandler = logging.StreamHandler()
+ohandler.setFormatter(log_fmt)
 fhandler = logging.handlers.RotatingFileHandler(
-    filename="errors.log", encoding="utf-8", mode="a", maxBytes=8000000, backupCount=5
+    filename="errors.log", mode="a", maxBytes=8000000, backupCount=5
 )
 fhandler.setFormatter(log_fmt)
+logger.addHandler(ohandler)
 logger.addHandler(fhandler)
 
 
@@ -44,12 +47,19 @@ def clear():
     return os.system("cls" if os.name == "nt" else "clear")
 
 
+def eofinput(*args, **kwargs):
+    try:
+        return input(*args, **kwargs)
+    except EOFError:
+        return None
+
+
 def main():
     try:
-        with open(old_filename, mode="r", encoding="utf-8") as jsonfile:
+        with open(old_filename, mode="r") as jsonfile:
             nations = json.load(jsonfile)
             nations.pop("AGENT", None)
-            with open(".tokens", mode="w", encoding="utf-8") as tokenfile:
+            with open(".tokens", mode="w") as tokenfile:
                 for tup in nations.items():
                     tokenfile.write("%s:%s\n" % tup)
         os.remove(old_filename)
@@ -64,7 +74,9 @@ def main():
             print("  %d. %s" % (i, text))
         print("\n  0. Exit\n")
         while True:
-            response = input("> ")
+            response = eofinput("> ")
+            if response is None:
+                return
             try:
                 response = int(response)
             except ValueError:
@@ -84,13 +96,13 @@ def main():
 
 def run():
     try:
-        with open("settings.json", "r", encoding="utf-8") as settings:
+        with open("settings.json", "r") as settings:
             agent = defaultagent % json.load(settings)["agent"]
     except (FileNotFoundError, json.JSONDecodeError):
-        input("User agent not set. Press enter to return to the menu . . . ")
+        eofinput("User agent not set. Press enter to return to the menu . . . ")
         return
     try:
-        with open(".tokens", mode="r", encoding="utf-8") as tokens:
+        with open(".tokens", mode="r") as tokens:
             for line in tokens:
                 nation, autologin = tuple(map(str.strip, line.split(":")))
                 try:
@@ -109,27 +121,27 @@ def run():
                         print(
                             "The rate limit was exceeded and you've been locked out. Aborting run."
                         )
-                        input("Press enter to return to the menu . . . ")
+                        eofinput("Press enter to return to the menu . . . ")
                         return
                     elif error.code >= 500:
                         print("An internal server error occurred. Aborting run.")
-                        input("Press enter to return to the menu . . . ")
+                        eofinput("Press enter to return to the menu . . . ")
                         return
                     else:
                         logger.error(error)
                         print("An unknown error occurred. Aborting run.")
-                        input("Press enter to return to the menu . . . ")
+                        eofinput("Press enter to return to the menu . . . ")
                         return
                 except Exception as error:
                     logger.exception(error)
                     print(
                         "Something went wrong with the script. Please contact Darcania with the above traceback at your earliest convenience. Aborting run."
                     )
-                    input("Press enter to return to the menu . . . ")
+                    eofinput("Press enter to return to the menu . . . ")
                     return
-        input("Run complete. Press enter to return to the menu . . . ")
+        eofinput("Run complete. Press enter to return to the menu . . . ")
     except FileNotFoundError:
-        input("No nations have been saved. Press enter to return to the menu . . . ")
+        eofinput("No nations have been saved. Press enter to return to the menu . . . ")
 
 
 def set_agent():
@@ -137,25 +149,25 @@ def set_agent():
         "Set a new user agent. Be sure to keep it descriptive, e.g. nation name and contact email."
     )
     print("The script itself will append information about itself automatically.")
-    agent = input("New agent: ")
+    agent = eofinput("New agent: ")
     if not agent:
-        input("No agent given. Press enter to return to the menu . . . ")
-    with open("settings.json", "w", encoding="utf-8") as settings:
+        eofinput("No agent given. Press enter to return to the menu . . . ")
+    with open("settings.json", "w") as settings:
         json.dump({"agent": agent}, settings)
 
-    input("User agent set. Press enter to return to the menu . . . ")
+    eofinput("User agent set. Press enter to return to the menu . . . ")
 
 
 def add_nations():
     try:
-        with open("settings.json", "r", encoding="utf-8") as settings:
+        with open("settings.json", "r") as settings:
             agent = defaultagent % json.load(settings)["agent"]
     except (FileNotFoundError, json.JSONDecodeError):
-        input("User agent not set. Press enter to return to the menu . . . ")
+        eofinput("User agent not set. Press enter to return to the menu . . . ")
         return
     to_add = {}
     while True:
-        nation = input("Nation: ")
+        nation = eofinput("Nation: ")
         if not nation:
             break
         nation = "_".join(nation.strip().lower().split())
@@ -202,14 +214,14 @@ def add_nations():
             del password
 
     if not to_add:
-        input("No data to save. Press enter to return to the menu . . . ")
+        eofinput("No data to save. Press enter to return to the menu . . . ")
         return
 
     print("Saving new nation tokens . . . ")
     tmp_name = ".tokens-%d.tmp" % random.randrange(1000, 10000)
-    with open(tmp_name, "w", encoding="utf-8") as tokens_tmp:
+    with open(tmp_name, "w") as tokens_tmp:
         try:
-            with open(".tokens", "r", encoding="utf-8") as tokens:
+            with open(".tokens", "r") as tokens:
                 for line in tokens:
                     nation, _ = tuple(map(str.strip, line.split(":")))
                     if nation in to_add:
@@ -221,7 +233,7 @@ def add_nations():
             tokens_tmp.write("%s:%s\n" % tup)
     os.replace(tmp_name, ".tokens")
 
-    input("Tokens updated. Press enter to return to the menu . . . ")
+    eofinput("Tokens updated. Press enter to return to the menu . . . ")
 
 
 def remove_nations():
@@ -229,11 +241,11 @@ def remove_nations():
         if os.path.getsize(".tokens") == 0:
             raise FileNotFoundError()
     except FileNotFoundError:
-        input("No nations are saved. Press enter to return to the menu . . . ")
+        eofinput("No nations are saved. Press enter to return to the menu . . . ")
         return
     to_remove = set()
     while True:
-        nation = input("Nation: ")
+        nation = eofinput("Nation: ")
         if not nation:
             break
         nation = "_".join(nation.strip().lower().split())
@@ -243,39 +255,39 @@ def remove_nations():
         to_remove.add(nation)
 
     if not to_remove:
-        input("No nations to remove. Press enter to return to the menu . . . ")
+        eofinput("No nations to remove. Press enter to return to the menu . . . ")
         return
 
     print("Updating nation tokens . . . ")
-    with open(".tokens.tmp", "w", encoding="utf-8") as tokens_tmp:
+    with open(".tokens.tmp", "w") as tokens_tmp:
         try:
-            with open(".tokens", "r", encoding="utf-8") as tokens:
+            with open(".tokens", "r") as tokens:
                 for line in tokens:
                     nation, _ = tuple(map(str.strip, line.split(":")))
                     if nation in to_remove:
                         continue
                     tokens_tmp.write(line)
         except FileNotFoundError:
-            input("No nations are saved. Press enter to return to the menu . . . ")
+            eofinput("No nations are saved. Press enter to return to the menu . . . ")
             return
     os.replace(".tokens.tmp", ".tokens")
 
-    input("Tokens updated. Press enter to return to the menu . . . ")
+    eofinput("Tokens updated. Press enter to return to the menu . . . ")
 
 
 def list_nations():
     _, lines = os.get_terminal_size(2)
     try:
-        with open(".tokens", "r", encoding="utf-8") as tokens:
+        with open(".tokens", "r") as tokens:
             for i, line in enumerate(tokens):
                 if i > 0 and i % (lines - 1) == 0:
-                    input("  -- MORE --  ")
+                    eofinput("  -- MORE --  ")
                 nation, _ = tuple(map(str.strip, line.split(":")))
                 print(" ".join(nation.split("_")).title())
     except FileNotFoundError:
         print("No nations have been saved.")
     print()
-    input("No more nations. Press enter to return to the menu . . . ")
+    eofinput("No more nations. Press enter to return to the menu . . . ")
 
 
 @static_vars(pause_next=None)
