@@ -106,7 +106,7 @@ def run():
     try:
         with open(".tokens", mode="r") as tokens:
             for line in tokens:
-                nation, autologin = tuple(map(str.strip, line.split(":")))
+                nation, autologin = tuple(map(str.strip, line.split(":",1)))
                 try:
                     _log(agent, nation, autologin=autologin)
                 except HTTPError as error:
@@ -225,7 +225,7 @@ def add_nations():
         try:
             with open(".tokens", "r") as tokens:
                 for line in tokens:
-                    nation, _ = tuple(map(str.strip, line.split(":")))
+                    nation, _ = tuple(map(str.strip, line.split(":",1)))
                     if nation in to_add:
                         line = "%s:%s\n" % (nation, to_add.pop(nation))
                     tokens_tmp.write(line)
@@ -265,7 +265,7 @@ def remove_nations():
         try:
             with open(".tokens", "r") as tokens:
                 for line in tokens:
-                    nation, _ = tuple(map(str.strip, line.split(":")))
+                    nation, _ = tuple(map(str.strip, line.split(":",1)))
                     if nation in to_remove:
                         continue
                     tokens_tmp.write(line)
@@ -284,7 +284,7 @@ def list_nations():
             for i, line in enumerate(tokens):
                 if i > 0 and i % (lines - 1) == 0:
                     eofinput("  -- MORE --  ")
-                nation, _ = tuple(map(str.strip, line.split(":")))
+                nation, _ = tuple(map(str.strip, line.split(":",1)))
                 print(" ".join(nation.split("_")).title())
     except FileNotFoundError:
         print("No nations have been saved.")
